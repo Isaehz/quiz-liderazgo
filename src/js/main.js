@@ -2,6 +2,7 @@ import { QuizController } from './quiz.js';
 import { profiles } from './profiles.js';
 import { mountAvatar } from './avatar-engine.js';
 import { toPng } from 'html-to-image';
+import { saveResult } from './db.js';
 
 import cubeeData from '../avatars/cubee.json';
 import novaData from '../avatars/nova.json';
@@ -24,6 +25,7 @@ const otherAvatarInstances = new Map();
 let lastQuestionIndex = -1;
 let isAnimatingTransition = false;
 let displayedView = null;
+let resultSaved = false;
 
 // DOM Elements
 const viewIntro = document.getElementById('view-intro');
@@ -366,6 +368,21 @@ function renderResultsView(state) {
 
   viewResults.classList.remove('results-ready');
   requestAnimationFrame(() => viewResults.classList.add('results-ready'));
+
+  // Guardar resultado en la base de datos (sin duplicados)
+  if (!resultSaved) {
+    const resultData = {
+      profileId: profile.id,
+      studentName,
+      answers: state.answers,
+      createdAt: new Date().toISOString(),
+    };
+    saveResult(resultData).then(() => {
+      resultSaved = true;
+    }).catch(err => {
+      console.error('Error saving result:', err);
+    });
+  }
 }
 
 // Render Other 4 Avatars
@@ -480,6 +497,7 @@ async function exportResultImage() {
 function initApp() {
   quiz.subscribe(state => {
     if (state.view === 'intro') {
+      resultSaved = false;
       lastQuestionIndex = -1;
       showView('intro');
     } else if (state.view === 'student') {
@@ -491,6 +509,14 @@ function initApp() {
     } else if (state.view === 'results') {
       showView('results');
       renderResultsView(state);
+      if (!resultSaved && state.profile) {
+        resultSaved = true;
+        saveResult({
+          nombre: state.studentName,
+          respuestas: state.answers,
+          perfil: state.profile.id,
+        });
+      }
     }
   });
 
